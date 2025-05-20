@@ -1,0 +1,89 @@
+# course config files
+*.yaml
+
+# gradle
+.gradle/
+build
+
+
+# idea config
+.idea
+
+# old stages
+/Web Quiz Engine with Java/*
+!/Web Quiz Engine with Java/task/
+/Web Quiz Engine with Java/task/*
+!/Web Quiz Engine with Java/task/src
+!/Web Quiz Engine with Java/task/build.gradle
+!/Web Quiz Engine with Java/task/src.zip
+!/Web Quiz Engine with Java/task/all_classes.txt
+
+# Project exclude paths
+/Topics/ArrayList/Find the nearest number/out/
+/Topics/ArrayList/Find the nearest number/out/production/classes/
+/Topics/Break and continue. Branching/Bus tour/out/
+/Topics/Break and continue. Branching/Bus tour/out/production/classes/
+/Topics/Comparing values. Relational operators/Boys in a sport class/out/
+/Topics/Comparing values. Relational operators/Boys in a sport class/out/production/classes/
+/Topics/Custom threads/Numbers filter/out/
+/Topics/Custom threads/Numbers filter/out/production/classes/
+/Topics/Custom threads/String processor/out/
+/Topics/Custom threads/String processor/out/production/classes/
+/Topics/Declaring methods/Vowel or not/out/
+/Topics/Declaring methods/Vowel or not/out/production/classes/
+/Topics/Generic methods/Invert an array/out/
+/Topics/Generic methods/Invert an array/out/production/classes/
+/Topics/Generic methods/Print content/out/
+/Topics/Generic methods/Print content/out/production/classes/
+/Topics/Generic methods/The first element/out/
+/Topics/Generic methods/The first element/out/production/classes/
+/Topics/Getters and setters/Getting the fullname/out/
+/Topics/Getters and setters/Getting the fullname/out/production/classes/
+/Topics/Increment and decrement/Decrement all/out/
+/Topics/Increment and decrement/Decrement all/out/production/classes/
+/Topics/Inner classes/Christmas tree/out/
+/Topics/Inner classes/Christmas tree/out/production/classes/
+/Topics/Inner classes/New Inner class/out/
+/Topics/Inner classes/New Inner class/out/production/classes/
+/Topics/Iterating over arrays/Boxes/out/
+/Topics/Iterating over arrays/Boxes/out/production/classes/
+/Topics/Iterator and Iterable/Finding the max number/out/
+/Topics/Iterator and Iterable/Finding the max number/out/production/classes/
+/Topics/Iterator and Iterable/Hip-Hop/out/
+/Topics/Iterator and Iterable/Hip-Hop/out/production/classes/
+/Topics/Iterator and Iterable/No  J/out/
+/Topics/Iterator and Iterable/No  J/out/production/classes/
+/Topics/Iterator and Iterable/Remove elements of a collection/out/
+/Topics/Iterator and Iterable/Remove elements of a collection/out/production/classes/
+/Topics/Iterator and Iterable/Reversed list/out/
+/Topics/Iterator and Iterable/Reversed list/out/production/classes/
+/Topics/Optional/Check an Optional value/out/
+/Topics/Optional/Check an Optional value/out/production/classes/
+/Topics/Optional/Create an Optional value/out/
+/Topics/Optional/Create an Optional value/out/production/classes/
+/Topics/Optional/Sum up optional values/out/
+/Topics/Optional/Sum up optional values/out/production/classes/
+/Topics/Optional/The address book/out/
+/Topics/Optional/The address book/out/production/classes/
+/Topics/Printing data/Printing a magic letter/out/
+/Topics/Printing data/Printing a magic letter/out/production/classes/
+/Topics/Processing strings/Create an euphonious word/out/
+/Topics/Processing strings/Create an euphonious word/out/production/classes/
+/Topics/Processing strings/Generating passwords/out/
+/Topics/Processing strings/Generating passwords/out/production/classes/
+/Topics/Processing strings/Parse url/out/
+/Topics/Processing strings/Parse url/out/production/classes/
+/Topics/Reading user's input with Scanner/Hiring a chef/out/
+/Topics/Reading user's input with Scanner/Hiring a chef/out/production/classes/
+/Topics/Standard functional interfaces/An infinite numbers supplier/out/
+/Topics/Standard functional interfaces/An infinite numbers supplier/out/production/classes/
+/Topics/String/Extracting a substring/out/
+/Topics/String/Extracting a substring/out/production/classes/
+/Topics/Thread management/Calculate the number of distinct characters/out/
+/Topics/Thread management/Calculate the number of distinct characters/out/production/classes/
+/Topics/Thread management/Summing with threads/out/
+/Topics/Thread management/Summing with threads/out/production/classes/
+/Topics/Thread management/VeganPizza/out/
+/Topics/Thread management/VeganPizza/out/production/classes/
+/Topics/Thread synchronization/Thread safe down counter/out/
+/Topics/Thread synchronization/Thread safe down counter/out/production/classes/

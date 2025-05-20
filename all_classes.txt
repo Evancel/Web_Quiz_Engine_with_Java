@@ -1,0 +1,886 @@
+===== File: Web Quiz Engine with Java\task\src\engine\auth\AppUserAdapter.java =====
+package engine.auth;
+
+import engine.entity.AppUser;
+import org.springframework.security.core.GrantedAuthority;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import org.springframework.security.core.userdetails.UserDetails;
+
+import java.util.Collection;
+import java.util.List;
+
+public class AppUserAdapter implements UserDetails {
+    private final AppUser user;
+
+    public AppUserAdapter(AppUser user) {
+        this.user = user;
+    }
+
+    @Override
+    public Collection<? extends GrantedAuthority> getAuthorities() {
+        return List.of(new SimpleGrantedAuthority(user.getAuthority()));
+    }
+
+    @Override
+    public String getPassword() {
+        return user.getPassword();
+    }
+
+    @Override
+    public String getUsername() {
+        return user.getEmail();
+    }
+
+    @Override
+    public boolean isAccountNonExpired() {
+        return true;
+    }
+
+    @Override
+    public boolean isAccountNonLocked() {
+        return true;
+    }
+
+    @Override
+    public boolean isCredentialsNonExpired() {
+        return true;
+    }
+
+    @Override
+    public boolean isEnabled() {
+        return true;
+    }
+}
+
+===== File: Web Quiz Engine with Java\task\src\engine\auth\AppUserDetailsServiceImpl.java =====
+package engine.auth;
+
+import engine.repository.AppUserRepository;
+import engine.entity.AppUser;
+import org.springframework.security.core.userdetails.UserDetails;
+import org.springframework.security.core.userdetails.UserDetailsService;
+import org.springframework.security.core.userdetails.UsernameNotFoundException;
+import org.springframework.stereotype.Service;
+
+@Service
+public class AppUserDetailsServiceImpl implements UserDetailsService {
+    private final AppUserRepository repository;
+
+    public AppUserDetailsServiceImpl(AppUserRepository repository){
+        this.repository = repository;
+    }
+
+    @Override
+    public UserDetails loadUserByUsername(String email) throws UsernameNotFoundException {
+        AppUser user = repository
+                .findAppUserByEmail(email)
+                .orElseThrow(() -> new UsernameNotFoundException("Not found"));
+
+        return new AppUserAdapter(user);
+    }
+}
+
+===== File: Web Quiz Engine with Java\task\src\engine\auth\AuthenticationController.java =====
+package engine.auth;
+
+import engine.repository.AppUserRepository;
+import engine.entity.AppUser;
+import jakarta.validation.Valid;
+import org.springframework.http.ResponseEntity;
+import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
+
+@RestController
+@RequestMapping("/api/register")
+public class AuthenticationController {
+    private final AppUserRepository userRepository;
+    private final PasswordEncoder passwordEncoder;
+
+    public AuthenticationController(AppUserRepository userRepository, PasswordEncoder passwordEncoder) {
+        this.userRepository = userRepository;
+        this.passwordEncoder = passwordEncoder;
+    }
+    @PostMapping()
+    public ResponseEntity<?> register(@Valid @RequestBody AppUser request) {
+        if (userRepository.findAppUserByEmail(request.getEmail()).isPresent()) {
+            return ResponseEntity.badRequest().build();
+        }
+
+        AppUser user = new AppUser(
+                request.getEmail(),
+                passwordEncoder.encode(request.getPassword()),
+                "ROLE_USER"
+        );
+        userRepository.save(user);
+        return ResponseEntity.ok().build();
+    }
+}
+
+===== File: Web Quiz Engine with Java\task\src\engine\config\SecurityConfig.java =====
+package engine.config;
+
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpMethod;
+import org.springframework.security.config.Customizer;
+import org.springframework.security.config.annotation.web.builders.HttpSecurity;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
+import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.security.web.SecurityFilterChain;
+
+@Configuration
+public class SecurityConfig {
+
+    @Bean
+    public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
+        http
+                .httpBasic(Customizer.withDefaults())     // Default Basic auth config
+                .csrf(configurer -> configurer.disable()) // for POST requests via Postman
+                .authorizeHttpRequests(auth -> auth
+                        .requestMatchers(HttpMethod.POST, "/api/register").permitAll()
+                        .requestMatchers(HttpMethod.POST,"/actuator/shutdown").permitAll()
+                        .anyRequest().authenticated()
+                );
+
+        return http.build();
+    }
+
+    @Bean
+    public PasswordEncoder passwordEncoder() {
+        return new BCryptPasswordEncoder();
+    }
+}
+
+===== File: Web Quiz Engine with Java\task\src\engine\controller\WebQuizController.java =====
+package engine.controller;
+
+import engine.dto.AnswerDTO;
+import engine.entity.AppUser;
+import engine.entity.CompletedQuiz;
+import engine.entity.Quiz;
+import engine.entity.Result;
+import engine.repository.AppUserRepository;
+import engine.service.CompletedQuizService;
+import engine.service.WebQuizService;
+import jakarta.validation.Valid;
+import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.security.core.userdetails.UserDetails;
+import org.springframework.web.bind.annotation.*;
+
+import java.time.LocalDateTime;
+import java.util.Optional;
+
+@RestController
+@RequestMapping("/api/quizzes")
+public class WebQuizController {
+    private final WebQuizService webQuizService;
+    private final AppUserRepository userRepository;
+    private final CompletedQuizService completedQuizService;
+
+    private final Integer pageSize = 10;
+
+    public WebQuizController(WebQuizService webQuizService,
+                             AppUserRepository userRepository,
+                             CompletedQuizService completedQuizService) {
+        this.webQuizService = webQuizService;
+        this.userRepository = userRepository;
+        this.completedQuizService = completedQuizService;
+    }
+
+    @GetMapping("/{id}")
+    public ResponseEntity<?> getWebQuiz(@PathVariable("id") Integer id) {
+        Optional<Quiz> quiz = webQuizService.getQuizById(id);
+        if (quiz.isEmpty()) {
+            return ResponseEntity.notFound().build();
+        }
+
+        return ResponseEntity.ok(quiz);
+    }
+
+    @GetMapping()
+    public ResponseEntity<?> getWebQuizes(@RequestParam("page") Integer pageNumber) {
+        if (pageNumber < 0) {
+            return ResponseEntity.badRequest().build();
+        }
+        return ResponseEntity.ok(webQuizService.getQuizes(pageNumber, pageSize));
+    }
+
+    @GetMapping("/completed")
+    public ResponseEntity<?> getCompletedWebQuizes(@RequestParam("page") Integer pageNumber,
+                                                   @AuthenticationPrincipal UserDetails details) {
+        if (pageNumber < 0) {
+            return ResponseEntity.badRequest().build();
+        }
+
+        Optional<AppUser> currUser = userRepository.findAppUserByEmail(details.getUsername());
+        if (currUser.isEmpty()) {
+            return ResponseEntity.status(401).build();
+        }
+
+        return ResponseEntity.ok(completedQuizService.getCompletedQuizByAppUser(
+                currUser.get(),
+                pageNumber,
+                pageSize));
+    }
+
+    @PostMapping()
+    public ResponseEntity<?> addWebQuiz(@AuthenticationPrincipal UserDetails details,
+                                        @Valid @RequestBody Quiz quiz) {
+        Optional<AppUser> author = userRepository.findAppUserByEmail(details.getUsername());
+        if (author.isEmpty()) {
+            return ResponseEntity.status(401).build();
+        }
+
+        quiz.setAuthor(author.get());
+
+        webQuizService.addWebQuiz(quiz);
+        return ResponseEntity.ok().body(quiz);
+    }
+
+    @PostMapping("/{id}/solve")
+    public ResponseEntity<?> postAnswer(@AuthenticationPrincipal UserDetails details,
+                                        @PathVariable("id") Integer id,
+                                        @RequestBody AnswerDTO answerDTO) {
+        Optional<Quiz> quiz = webQuizService.getQuizById(id);
+        if (quiz.isEmpty()) {
+            return ResponseEntity.notFound().build();
+        }
+
+        Optional<AppUser> currUser = userRepository.findAppUserByEmail(details.getUsername());
+        if (currUser.isEmpty()) {
+            return ResponseEntity.status(401).build();
+        }
+
+        Result result;
+        if (webQuizService.rightAnswers(id, answerDTO.getAnswer())) {
+            result = new Result(true, "Congratulations, you're right!");
+            CompletedQuiz completedQuiz = new CompletedQuiz(currUser.get(), quiz.get(), LocalDateTime.now());
+            completedQuizService.save(completedQuiz);
+        } else {
+            result = new Result(false, "Wrong answer! Please, try again.");
+        }
+        return ResponseEntity.ok(result);
+    }
+
+    @DeleteMapping("/{id}")
+    public ResponseEntity<?> deleteQuiz(@AuthenticationPrincipal UserDetails details,
+                                        @PathVariable("id") Integer id) {
+        Optional<AppUser> currUser = userRepository.findAppUserByEmail(details.getUsername());
+        if (currUser.isEmpty()) {
+            return ResponseEntity.status(401).build();
+        }
+        AppUser author = currUser.get();
+
+        Optional<Quiz> quiz = webQuizService.getQuizById(id);
+        if (quiz.isEmpty()) {
+            return ResponseEntity.notFound().build();
+        } else if (!quiz.get().getAuthor().equals(author)) {
+            return ResponseEntity.status(403).build();
+        }
+
+        webQuizService.deleteQuiz(id);
+        return ResponseEntity.noContent().build();
+    }
+}
+
+===== File: Web Quiz Engine with Java\task\src\engine\dto\AnswerDTO.java =====
+package engine.dto;
+
+public class AnswerDTO {
+    private int[] answer;
+
+    public AnswerDTO() {
+    }
+
+    public AnswerDTO(int[] answer) {
+        this.answer = answer;
+    }
+
+    public int[] getAnswer() {
+        return answer;
+    }
+
+    public void setAnswer(int[] answer) {
+        this.answer = answer;
+    }
+}
+
+===== File: Web Quiz Engine with Java\task\src\engine\dto\CompletedQuizResponse.java =====
+package engine.dto;
+
+import java.time.LocalDateTime;
+
+public class CompletedQuizResponse {
+    private Integer id;
+    private LocalDateTime completedAt;
+
+    public CompletedQuizResponse() {
+    }
+
+    public CompletedQuizResponse(Integer id, LocalDateTime completedAt) {
+        this.id = id;
+        this.completedAt = completedAt;
+    }
+
+    public Integer getId() {
+        return id;
+    }
+
+    public void setId(Integer id) {
+        this.id = id;
+    }
+
+    public LocalDateTime getCompletedAt() {
+        return completedAt;
+    }
+
+    public void setCompletedAt(LocalDateTime completedAt) {
+        this.completedAt = completedAt;
+    }
+}
+
+===== File: Web Quiz Engine with Java\task\src\engine\entity\AppUser.java =====
+package engine.entity;
+
+import com.fasterxml.jackson.annotation.JsonProperty;
+import com.fasterxml.jackson.annotation.JsonPropertyOrder;
+import jakarta.persistence.*;
+import jakarta.validation.constraints.Email;
+import jakarta.validation.constraints.Size;
+
+import java.util.List;
+
+@Entity
+@JsonPropertyOrder({
+        "id",
+        "email",
+})
+public class AppUser{
+    @Id
+    @GeneratedValue
+    @JsonProperty(access = JsonProperty.Access.READ_ONLY)
+    private Integer id;
+    @Email(regexp = ".+@.+\\..+", message = "Email must be valid and contain a domain")
+    @Column(unique = true)
+    private String email;
+    @Size(min = 5)
+    private String password;
+    private String authority;
+    @OneToMany(mappedBy = "appUser")
+    private List<CompletedQuiz> completedQuizzes;
+
+    public AppUser(){}
+
+    public AppUser(String email, String password, String authority){
+        this.email = email;
+        this.password = password;
+        this.authority = authority;
+    }
+
+    public Integer getId() {
+        return id;
+    }
+
+    public void setId(Integer id) {
+        this.id = id;
+    }
+
+    public String getEmail() {
+        return email;
+    }
+
+    public void setEmail(String email) {
+        this.email = email;
+    }
+
+    public String getPassword() {
+        return password;
+    }
+
+    public void setPassword(String password) {
+        this.password = password;
+    }
+
+    public String getAuthority() {
+        return authority;
+    }
+
+    public void setAuthority(String role) {
+        this.authority = role;
+    }
+
+    public List<CompletedQuiz> getCompletedQuizzes() {
+        return completedQuizzes;
+    }
+
+    public void setCompletedQuizzes(List<CompletedQuiz> completedQuizzes) {
+        this.completedQuizzes = completedQuizzes;
+    }
+}
+
+
+===== File: Web Quiz Engine with Java\task\src\engine\entity\CompletedQuiz.java =====
+package engine.entity;
+
+import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.fasterxml.jackson.annotation.JsonProperty;
+import jakarta.persistence.*;
+
+import java.time.LocalDateTime;
+
+@Entity
+public class CompletedQuiz {
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @JsonProperty(access = JsonProperty.Access.READ_ONLY)
+    private Integer id;
+    @ManyToOne
+    private AppUser appUser;
+    @ManyToOne
+    private Quiz quiz;
+    private LocalDateTime completedAt;
+
+    public CompletedQuiz() {
+    }
+
+    public CompletedQuiz(AppUser appUser, Quiz quiz, LocalDateTime completedAt) {
+        this.appUser = appUser;
+        this.quiz = quiz;
+        this.completedAt = completedAt;
+    }
+
+    public Integer getId() {
+        return id;
+    }
+
+    public void setId(Integer id) {
+        this.id = id;
+    }
+
+    public AppUser getAppUser() {
+        return appUser;
+    }
+
+    public void setAppUser(AppUser appUser) {
+        this.appUser = appUser;
+    }
+
+    public Quiz getQuiz() {
+        return quiz;
+    }
+
+    public void setQuiz(Quiz quiz) {
+        this.quiz = quiz;
+    }
+
+    public LocalDateTime getCompletedAt() {
+        return completedAt;
+    }
+
+    public void setCompletedAt(LocalDateTime completedAt) {
+        this.completedAt = completedAt;
+    }
+}
+
+===== File: Web Quiz Engine with Java\task\src\engine\entity\Quiz.java =====
+package engine.entity;
+
+import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.fasterxml.jackson.annotation.JsonProperty;
+import com.fasterxml.jackson.annotation.JsonPropertyOrder;
+import jakarta.persistence.*;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Size;
+import org.hibernate.annotations.Fetch;
+import org.hibernate.annotations.FetchMode;
+
+import java.util.Arrays;
+import java.util.List;
+
+@Entity
+@JsonPropertyOrder({
+        "id",
+        "title",
+        "text",
+        "options",
+})
+public class Quiz {
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @JsonProperty(access = JsonProperty.Access.READ_ONLY)
+    private Integer id;
+    @NotBlank
+    private String title;
+    @NotBlank
+    private String text;
+    @Fetch(value = FetchMode.SUBSELECT)
+    @NotNull
+    @Size(min = 2)
+    private String[] options;
+    @ElementCollection(fetch = FetchType.EAGER)
+    @JsonProperty(access = JsonProperty.Access.WRITE_ONLY)
+    private int[] answer = new int[0];
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "user_id")
+    @JsonIgnore
+    private AppUser author;
+    @OneToMany(mappedBy = "quiz", cascade = CascadeType.ALL, orphanRemoval = true)
+    private List<CompletedQuiz> completions;
+
+    public Quiz() {
+    }
+
+    public Quiz(String title, String text, String[] options, AppUser author) {
+        this.title = title;
+        this.text = text;
+        this.options = options;
+        this.author = author;
+    }
+
+    public Quiz(String title, String text, String[] options, int[] answer, AppUser author) {
+        this.title = title;
+        this.text = text;
+        this.options = options;
+        if(answer != null){
+            this.answer = answer;
+        }
+        this.author = author;
+    }
+
+    public Integer getId() {
+        return id;
+    }
+
+    public void setId(Integer id) {
+        this.id = id;
+    }
+
+    public String getTitle() {
+        return title;
+    }
+
+    public void setTitle(String title) {
+        this.title = title;
+    }
+
+    public String getText() {
+        return text;
+    }
+
+    public void setText(String text) {
+        this.text = text;
+    }
+
+    public String[] getOptions() {
+        return options;
+    }
+
+    public void setOptions(String[] options) {
+        this.options = options;
+    }
+
+    public int[] getAnswer() {
+        return answer;
+    }
+
+    public void setAnswer(int[] answer) {
+        if(answer != null){
+            this.answer = answer;
+        }
+    }
+
+    public AppUser getAuthor(){
+        return author;
+    }
+
+    public void setAuthor(AppUser user){
+        this.author = user;
+    }
+
+    @Override
+    public String toString() {
+        return "Quiz{" +
+                "title='" + title + '\'' +
+                ", text='" + text + '\'' +
+                ", options=" + Arrays.toString(options) +
+                '}';
+    }
+}
+
+===== File: Web Quiz Engine with Java\task\src\engine\entity\Result.java =====
+package engine.entity;
+
+import com.fasterxml.jackson.annotation.JsonPropertyOrder;
+
+@JsonPropertyOrder({
+        "success",
+        "feedback",
+})
+public class Result {
+    private boolean success;
+    private String feedback;
+
+    public Result(){}
+
+    public Result(boolean success, String feedback){
+        this.success = success;
+        this.feedback = feedback;
+    }
+
+    public boolean isSuccess() {
+        return success;
+    }
+
+    public void setSuccess(boolean success) {
+        this.success = success;
+    }
+
+    public String getFeedback() {
+        return feedback;
+    }
+
+    public void setFeedback(String feedback) {
+        this.feedback = feedback;
+    }
+
+    @Override
+    public String toString() {
+        return "Answer{" +
+                "success=" + success +
+                ", feedback='" + feedback + '\'' +
+                '}';
+    }
+}
+
+===== File: Web Quiz Engine with Java\task\src\engine\exception\ControllerExceptionHandler.java =====
+package engine.exception;
+
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.web.bind.annotation.ExceptionHandler;
+import org.springframework.web.bind.annotation.RestControllerAdvice;
+
+@RestControllerAdvice
+public class ControllerExceptionHandler {
+
+    @ExceptionHandler(MethodArgumentNotValidException.class)
+    public ResponseEntity<Void> handleValidationError(MethodArgumentNotValidException ex) {
+        return ResponseEntity.badRequest().build(); // 400 with empty body
+    }
+}
+
+===== File: Web Quiz Engine with Java\task\src\engine\repository\AppUserRepository.java =====
+package engine.repository;
+
+import engine.entity.AppUser;
+import org.springframework.data.repository.CrudRepository;
+import org.springframework.stereotype.Repository;
+
+import java.util.Optional;
+
+@Repository
+public interface AppUserRepository extends CrudRepository<AppUser, Long> {
+    Optional<AppUser> findAppUserByEmail(String email);
+}
+
+===== File: Web Quiz Engine with Java\task\src\engine\repository\CompletedQuizRepository.java =====
+package engine.repository;
+
+import engine.entity.AppUser;
+import engine.entity.CompletedQuiz;
+import engine.entity.Quiz;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.repository.CrudRepository;
+import org.springframework.data.repository.PagingAndSortingRepository;
+import org.springframework.stereotype.Repository;
+
+@Repository
+public interface CompletedQuizRepository extends CrudRepository<CompletedQuiz, Integer>,
+        PagingAndSortingRepository <CompletedQuiz, Integer>{
+    boolean existsByQuiz(Quiz quiz);
+    void deleteByQuiz(Quiz quiz);
+    Page<CompletedQuiz> findAllByAppUser(AppUser user, Pageable pageable);
+}
+
+===== File: Web Quiz Engine with Java\task\src\engine\repository\WebQuizRepository.java =====
+package engine.repository;
+
+import engine.entity.AppUser;
+import engine.entity.Quiz;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.CrudRepository;
+import org.springframework.data.repository.PagingAndSortingRepository;
+import org.springframework.stereotype.Repository;
+
+import java.util.Optional;
+
+@Repository
+public interface WebQuizRepository extends CrudRepository<Quiz, Integer>, PagingAndSortingRepository<Quiz, Integer> {
+    Optional<Quiz> findByIdAndAuthor(int id, AppUser author);
+    Iterable<Quiz> findByAuthor(AppUser author);
+
+    @Override
+    Page<Quiz> findAll(Pageable pageable);
+}
+
+===== File: Web Quiz Engine with Java\task\src\engine\service\CompletedQuizService.java =====
+package engine.service;
+
+import engine.dto.CompletedQuizResponse;
+import engine.entity.AppUser;
+import engine.entity.CompletedQuiz;
+import engine.repository.CompletedQuizRepository;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
+import org.springframework.stereotype.Service;
+
+import java.util.ArrayList;
+import java.util.List;
+
+@Service
+public class CompletedQuizService {
+    private final CompletedQuizRepository completedQuizRepository;
+
+    public CompletedQuizService(CompletedQuizRepository completedQuizRepository) {
+        this.completedQuizRepository = completedQuizRepository;
+    }
+
+    public void save(CompletedQuiz completedQuiz) {
+        completedQuizRepository.save(completedQuiz);
+    }
+
+    public Page<CompletedQuizResponse> getCompletedQuizByAppUser(AppUser user, Integer pageNumber, Integer pageSize) {
+        return completedQuizRepository.findAllByAppUser(
+                user,
+                PageRequest.of(pageNumber, pageSize, Sort.by(Sort.Direction.DESC, "completedAt"))
+        ).map(cq -> new CompletedQuizResponse(cq.getQuiz().getId(), cq.getCompletedAt()));
+    }
+}
+
+===== File: Web Quiz Engine with Java\task\src\engine\service\WebQuizService.java =====
+package engine.service;
+
+import engine.entity.AppUser;
+import engine.entity.Quiz;
+import engine.repository.CompletedQuizRepository;
+import engine.repository.WebQuizRepository;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
+import org.springframework.stereotype.Service;
+
+import java.util.Arrays;
+import java.util.Optional;
+
+@Service
+public class WebQuizService {
+    private final WebQuizRepository repository;
+    private final CompletedQuizRepository completedQuizRepository;
+
+    public WebQuizService(WebQuizRepository repository, CompletedQuizRepository completedQuizRepository) {
+        this.repository = repository;
+        this.completedQuizRepository = completedQuizRepository;
+    }
+
+    public void addWebQuiz(Quiz quiz) {
+        if (quiz == null) {
+            return;
+        }
+
+        repository.save(quiz);
+    }
+
+    public Optional<Quiz> getQuizById(Integer id) {
+        return repository.findById(id);
+    }
+
+    public Optional<Quiz> getQuizByIdAndAuthor(Integer id, AppUser author) {
+        return repository.findByIdAndAuthor(id, author);
+    }
+
+    public Iterable<Quiz> getQuizesByAuthor(AppUser author) {
+        return repository.findByAuthor(author);
+    }
+
+    public Page<Quiz> getQuizes(Integer pageNumber, Integer pageSize) {
+        return repository.findAll(PageRequest.of(pageNumber, pageSize, Sort.by(Sort.Direction.DESC, "id")));
+    }
+
+    public boolean rightAnswers(Integer id, int[] answer) {
+        Quiz currQuiz = repository.findById(id).get();
+
+
+        return Arrays.equals(currQuiz.getAnswer(), normalize(answer));
+    }
+
+    public static int[] normalize(int[] array) {
+        return array == null ? new int[0] : array;
+    }
+
+    public void deleteQuiz(int id) {
+        if (repository.findById(id).isPresent()) {
+            repository.deleteById(id);
+        }
+    }
+}
+
+===== File: Web Quiz Engine with Java\task\src\engine\WebQuizEngine.java =====
+package engine;
+
+import org.springframework.boot.SpringApplication;
+import org.springframework.boot.autoconfigure.SpringBootApplication;
+
+@SpringBootApplication
+public class WebQuizEngine {
+
+    public static void main(String[] args) {
+        SpringApplication.run(WebQuizEngine.class, args);
+    }
+
+}
+
+===== File: Web Quiz Engine with Java\task\src\FileConcatenator.java =====
+import java.io.*;
+import java.nio.file.*;
+import java.util.stream.Stream;
+
+public class FileConcatenator {
+    public static void main(String[] args) {
+        String sourceDir = "Web Quiz Engine with Java/task/src"; // Replace with your actual source directory
+        String outputFile = "all_classes.txt";
+
+        try (BufferedWriter writer = new BufferedWriter(new FileWriter(outputFile))) {
+            Files.walk(Paths.get(sourceDir))
+                    .filter(path -> path.toString().endsWith(".java"))
+                    .forEach(path -> {
+                        try (Stream<String> lines = Files.lines(path)) {
+                            writer.write("===== File: " + path.toString() + " =====\n");
+                            lines.forEach(line -> {
+                                try {
+                                    writer.write(line);
+                                    writer.newLine();
+                                } catch (IOException e) {
+                                    e.printStackTrace();
+                                }
+                            });
+                            writer.write("\n");
+                        } catch (IOException e) {
+                            e.printStackTrace();
+                        }
+                    });
+            System.out.println("All files have been concatenated into " + outputFile);
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+    }
+}
+
